@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Tailwind 4 ya no pone el cursor de mano en los botones: se agrega para todo lo clickeable. */
+@layer base {
+  button:not(:disabled),
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  label:has(input[type="checkbox"]) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
