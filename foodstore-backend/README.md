@@ -67,6 +67,12 @@ pip install -r requirements.txt
 fastapi dev app/main.py
 ```
 
+Si PowerShell no deja ejecutar `Activate.ps1` ("la ejecución de scripts está deshabilitada"), habilitarlo una vez para el usuario y volver a activar:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
 - API: http://localhost:8000
 - Swagger (documentación interactiva): http://localhost:8000/docs
 
