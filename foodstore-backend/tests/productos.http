@@ -1,0 +1,395 @@
+# Pruebas del módulo Productos (REST Client de VS Code).
+# Requisito: backend corriendo con "fastapi dev app/main.py".
+# Ejecutar las peticiones en orden, de arriba hacia abajo.
+# Ids de unidades del seed: 1 kilogramo (kg), 2 gramo (g), 3 litro (L), 4 mililitro (mL), 5 pieza (u), 6 docena (doc).
+# Al final se anula todo lo creado, así el archivo se puede volver a correr.
+
+@baseUrl = http://localhost:8000/api/v1
+
+### Catálogo de unidades de medida
+# Esperado: 200
+GET {{baseUrl}}/unidades-medida
+
+############################################################
+# ALTA (POST)
+############################################################
+
+### Crear producto vendido por kilogramo (stock con decimales)
+# Esperado: 201 (incluye unidad_venta anidada y hay_stock = true)
+# @name queso
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Queso cremoso",
+  "descripcion": "Horma fresca",
+  "precio_base": 12.50,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 3.5,
+  "disponible": true
+}
+
+### Crear producto vendido por pieza (unidad contable, stock entero)
+# Esperado: 201
+# @name empanada
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Empanada de carne",
+  "descripcion": "Cortada a cuchillo",
+  "precio_base": 1500,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 24,
+  "disponible": true
+}
+
+### Crear producto sin indicar stock (default 0)
+# Esperado: 201 (stock_cantidad = 0 y hay_stock = false)
+# @name helado
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Helado de chocolate",
+  "precio_base": 8000,
+  "unidad_venta_id": 1
+}
+
+############################################################
+# CONSULTA (GET)
+############################################################
+
+### Listar productos (por defecto: solo activos, skip=0, limit=10)
+# Esperado: 200
+GET {{baseUrl}}/productos
+
+### Paginación: los dos primeros
+# Esperado: 200
+GET {{baseUrl}}/productos?skip=0&limit=2
+
+### Paginación inválida: limit mayor a 50
+# Esperado: 422
+GET {{baseUrl}}/productos?limit=51
+
+### Filtro search: coincidencia parcial sin distinguir mayúsculas
+# Esperado: 200 (devuelve "Queso cremoso")
+GET {{baseUrl}}/productos?search=QUESO
+
+### Detalle por id: unidad de venta, categorías, stock_cantidad y hay_stock
+# Esperado: 200
+GET {{baseUrl}}/productos/{{queso.response.body.$.id}}
+
+### Detalle de un id inexistente
+# Esperado: 404
+GET {{baseUrl}}/productos/99999
+
+############################################################
+# ACTUALIZACIÓN (PUT) Y DISPONIBILIDAD
+############################################################
+
+### Actualizar el precio del queso (PUT reemplaza todos los campos propios)
+# Esperado: 200
+PUT {{baseUrl}}/productos/{{queso.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Queso cremoso",
+  "descripcion": "Horma fresca",
+  "precio_base": 13.75,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 3.5,
+  "disponible": true
+}
+
+### Pausar la venta de la empanada (disponible = false)
+# Esperado: 200 (disponible = false, activo sigue en true, stock sin cambios)
+PUT {{baseUrl}}/productos/{{empanada.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Empanada de carne",
+  "descripcion": "Cortada a cuchillo",
+  "precio_base": 1500,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 24,
+  "disponible": false
+}
+
+### Filtro disponible=false: la empanada sigue en el catálogo, pausada
+# Esperado: 200 (devuelve la empanada con activo = true)
+GET {{baseUrl}}/productos?disponible=false
+
+### Filtro disponible=true
+# Esperado: 200 (no incluye la empanada)
+GET {{baseUrl}}/productos?disponible=true
+
+### Actualizar un id inexistente
+# Esperado: 404
+PUT {{baseUrl}}/productos/99999
+Content-Type: application/json
+
+{
+  "nombre": "No existe",
+  "precio_base": 1,
+  "unidad_venta_id": 1
+}
+
+############################################################
+# hay_stock ANTES Y DESPUÉS DE LLEVAR EL STOCK A 0 (RN-11)
+############################################################
+
+### Antes: el queso tiene stock 3.5
+# Esperado: 200 (hay_stock = true)
+GET {{baseUrl}}/productos/{{queso.response.body.$.id}}
+
+### Llevar el stock del queso a 0
+# Esperado: 200 (stock_cantidad = 0 y hay_stock = false; disponible y activo no cambian)
+PUT {{baseUrl}}/productos/{{queso.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Queso cremoso",
+  "descripcion": "Horma fresca",
+  "precio_base": 13.75,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 0,
+  "disponible": true
+}
+
+### Después: el queso ya no tiene stock
+# Esperado: 200 (hay_stock = false)
+GET {{baseUrl}}/productos/{{queso.response.body.$.id}}
+
+############################################################
+# FILTRO categoria_id
+############################################################
+
+### Crear una categoría para el filtro
+# Esperado: 201
+# @name lacteos
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Lácteos",
+  "descripcion": "Quesos y derivados"
+}
+
+### Clasificar el queso en Lácteos
+# Esperado: 201
+POST {{baseUrl}}/productos/{{queso.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{lacteos.response.body.$.id}},
+  "es_principal": true
+}
+
+### Filtro categoria_id: solo los productos de Lácteos
+# Esperado: 200 (devuelve solo el queso, una vez)
+GET {{baseUrl}}/productos?categoria_id={{lacteos.response.body.$.id}}
+
+############################################################
+# ERRORES DE VALIDACIÓN (422) — la base no se modifica
+############################################################
+
+### Nombre con menos de 3 caracteres
+# Esperado: 422
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Té",
+  "precio_base": 100,
+  "unidad_venta_id": 1
+}
+
+### Precio negativo
+# Esperado: 422
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto con precio negativo",
+  "precio_base": -1,
+  "unidad_venta_id": 1
+}
+
+### Stock negativo
+# Esperado: 422
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto con stock negativo",
+  "precio_base": 100,
+  "unidad_venta_id": 1,
+  "stock_cantidad": -5
+}
+
+### Sin unidad de venta
+# Esperado: 422
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto sin unidad",
+  "precio_base": 100
+}
+
+### Stock con decimales sobre unidad contable (pieza) al crear — RN-10
+# Esperado: 422
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Medialuna",
+  "precio_base": 900,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 2.5
+}
+
+### Stock con decimales sobre unidad contable al actualizar — RN-10
+# Esperado: 422
+PUT {{baseUrl}}/productos/{{empanada.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Empanada de carne",
+  "descripcion": "Cortada a cuchillo",
+  "precio_base": 1500,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 10.5,
+  "disponible": false
+}
+
+### Cambio de unidad: el helado (kg) pasa a docena con stock 1.25 — RN-10
+# Esperado: 422
+PUT {{baseUrl}}/productos/{{helado.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Helado de chocolate",
+  "precio_base": 8000,
+  "unidad_venta_id": 6,
+  "stock_cantidad": 1.25
+}
+
+############################################################
+# REFERENCIA INEXISTENTE (404)
+############################################################
+
+### unidad_venta_id inexistente
+# Esperado: 404
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto con unidad inexistente",
+  "precio_base": 100,
+  "unidad_venta_id": 999
+}
+
+############################################################
+# NOMBRE REPETIDO (409) — RN-02
+############################################################
+
+### Crear con un nombre que ya existe (otras mayúsculas y espacios en los extremos)
+# Esperado: 409
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "  queso CREMOSO  ",
+  "precio_base": 10,
+  "unidad_venta_id": 1
+}
+
+### Actualizar el helado con el nombre del queso
+# Esperado: 409
+PUT {{baseUrl}}/productos/{{helado.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Queso cremoso",
+  "precio_base": 8000,
+  "unidad_venta_id": 1
+}
+
+### La petición rechazada no modificó la base: el helado conserva su nombre
+# Esperado: 200 (nombre = "Helado de chocolate")
+GET {{baseUrl}}/productos/{{helado.response.body.$.id}}
+
+############################################################
+# ANULACIÓN (DELETE) — baja lógica
+############################################################
+
+### Anular la empanada
+# Esperado: 204
+DELETE {{baseUrl}}/productos/{{empanada.response.body.$.id}}
+
+### Anular de nuevo la misma empanada
+# Esperado: 409
+DELETE {{baseUrl}}/productos/{{empanada.response.body.$.id}}
+
+### Anular un id inexistente
+# Esperado: 404
+DELETE {{baseUrl}}/productos/99999
+
+### La empanada anulada se consulta por id: activo = false, anulado_at con fecha, disponible sin cambios
+# Esperado: 200
+GET {{baseUrl}}/productos/{{empanada.response.body.$.id}}
+
+### El listado por defecto ya no la muestra
+# Esperado: 200 (sin la empanada)
+GET {{baseUrl}}/productos
+
+### Filtro activo=false: solo los anulados
+# Esperado: 200 (incluye la empanada)
+GET {{baseUrl}}/productos?activo=false
+
+### Modificar un producto anulado — RN-05
+# Esperado: 409
+PUT {{baseUrl}}/productos/{{empanada.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Empanada de carne",
+  "precio_base": 1600,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 24
+}
+
+### Un producto anulado libera su nombre — RN-02
+# Esperado: 201
+# @name empanada2
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Empanada de carne",
+  "precio_base": 1600,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 12
+}
+
+############################################################
+# LIMPIEZA: anular lo creado para poder volver a correr el archivo
+############################################################
+
+### Anular el queso
+# Esperado: 204
+DELETE {{baseUrl}}/productos/{{queso.response.body.$.id}}
+
+### Anular el helado
+# Esperado: 204
+DELETE {{baseUrl}}/productos/{{helado.response.body.$.id}}
+
+### Anular la segunda empanada
+# Esperado: 204
+DELETE {{baseUrl}}/productos/{{empanada2.response.body.$.id}}
+
+### Anular la categoría Lácteos
+# Esperado: 204
+DELETE {{baseUrl}}/categorias/{{lacteos.response.body.$.id}}

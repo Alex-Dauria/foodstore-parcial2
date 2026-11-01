@@ -1,0 +1,296 @@
+# Pruebas de Categorías y de las relaciones 1:N y N:N (REST Client de VS Code).
+# Requisito: backend corriendo con "fastapi dev app/main.py".
+# Ejecutar las peticiones en orden, de arriba hacia abajo.
+# Ids de unidades del seed: 1 kilogramo (kg), 5 pieza (u), 6 docena (doc).
+# Al final se anula todo lo creado, así el archivo se puede volver a correr.
+
+@baseUrl = http://localhost:8000/api/v1
+
+############################################################
+# CATEGORÍAS: ALTA, CONSULTA Y ACTUALIZACIÓN
+############################################################
+
+### Alta de la categoría Pastas
+# Esperado: 201
+# @name pastas
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Pastas",
+  "descripcion": "Pastas frescas y secas"
+}
+
+### Alta de la categoría Postres
+# Esperado: 201
+# @name postres
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Postres"
+}
+
+### Alta de la categoría Bebidas
+# Esperado: 201
+# @name bebidas
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Bebidas",
+  "descripcion": "Con y sin alcohol"
+}
+
+### Nombre repetido entre las activas (otras mayúsculas y espacios) — RN-02
+# Esperado: 409
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "  pastas "
+}
+
+### Nombre con menos de 3 caracteres — RN-01
+# Esperado: 422
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Pa"
+}
+
+### Listar categorías activas
+# Esperado: 200
+GET {{baseUrl}}/categorias
+
+### Filtro search
+# Esperado: 200 (devuelve Postres)
+GET {{baseUrl}}/categorias?search=post
+
+### Detalle de una categoría
+# Esperado: 200
+GET {{baseUrl}}/categorias/{{pastas.response.body.$.id}}
+
+### Detalle de una categoría inexistente
+# Esperado: 404
+GET {{baseUrl}}/categorias/99999
+
+### Actualizar nombre y descripción de Bebidas
+# Esperado: 200
+PUT {{baseUrl}}/categorias/{{bebidas.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Bebidas",
+  "descripcion": "Gaseosas, aguas y jugos"
+}
+
+### Actualizar Postres con el nombre de Pastas
+# Esperado: 409
+PUT {{baseUrl}}/categorias/{{postres.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "PASTAS"
+}
+
+### Actualizar una categoría inexistente
+# Esperado: 404
+PUT {{baseUrl}}/categorias/99999
+Content-Type: application/json
+
+{
+  "nombre": "No existe"
+}
+
+############################################################
+# RELACIÓN N:N: CLASIFICAR UN PRODUCTO EN DOS CATEGORÍAS
+############################################################
+
+### Crear el producto a clasificar (se vende por docena)
+# Esperado: 201
+# @name ravioles
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Ravioles de ricota",
+  "precio_base": 5200,
+  "unidad_venta_id": 6,
+  "stock_cantidad": 10
+}
+
+### Clasificar en Pastas como principal
+# Esperado: 201 (es_principal = true)
+POST {{baseUrl}}/productos/{{ravioles.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{pastas.response.body.$.id}},
+  "es_principal": true
+}
+
+### Clasificar en Postres como principal: Pastas deja de serlo en la misma operación — RN-09
+# Esperado: 201
+POST {{baseUrl}}/productos/{{ravioles.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{postres.response.body.$.id}},
+  "es_principal": true
+}
+
+### Categorías del producto: Pastas con es_principal = false y Postres con es_principal = true
+# Esperado: 200
+GET {{baseUrl}}/productos/{{ravioles.response.body.$.id}}/categorias
+
+### Clasificar dos veces en la misma categoría — RN-07
+# Esperado: 409
+POST {{baseUrl}}/productos/{{ravioles.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{pastas.response.body.$.id}},
+  "es_principal": false
+}
+
+### Clasificar en una categoría inexistente — RN-03
+# Esperado: 404
+POST {{baseUrl}}/productos/{{ravioles.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": 99999,
+  "es_principal": false
+}
+
+### Clasificar un producto inexistente — RN-03
+# Esperado: 404
+POST {{baseUrl}}/productos/99999/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{pastas.response.body.$.id}},
+  "es_principal": false
+}
+
+### Categorías de un producto inexistente
+# Esperado: 404
+GET {{baseUrl}}/productos/99999/categorias
+
+### Filtro categoria_id del listado de productos: los ravioles aparecen una sola vez
+# Esperado: 200
+GET {{baseUrl}}/productos?categoria_id={{pastas.response.body.$.id}}
+
+### Relación 1:N: el detalle del producto trae la unidad de venta anidada y sus categorías
+# Esperado: 200
+GET {{baseUrl}}/productos/{{ravioles.response.body.$.id}}
+
+############################################################
+# ANULACIÓN DE CATEGORÍAS
+############################################################
+
+### Anular Bebidas
+# Esperado: 204
+DELETE {{baseUrl}}/categorias/{{bebidas.response.body.$.id}}
+
+### Anular de nuevo Bebidas — RN-04
+# Esperado: 409
+DELETE {{baseUrl}}/categorias/{{bebidas.response.body.$.id}}
+
+### Anular una categoría inexistente
+# Esperado: 404
+DELETE {{baseUrl}}/categorias/99999
+
+### Modificar una categoría anulada — RN-05
+# Esperado: 409
+PUT {{baseUrl}}/categorias/{{bebidas.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Bebidas frías"
+}
+
+### Listar categorías anuladas
+# Esperado: 200 (incluye Bebidas con activo = false)
+GET {{baseUrl}}/categorias?activo=false
+
+### Clasificar en una categoría anulada — RN-08
+# Esperado: 409
+POST {{baseUrl}}/productos/{{ravioles.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{bebidas.response.body.$.id}},
+  "es_principal": false
+}
+
+### Una categoría anulada libera su nombre — RN-02
+# Esperado: 201
+# @name bebidas2
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Bebidas"
+}
+
+### Anular Postres, que tiene clasificados los ravioles — RN-06
+# Esperado: 204
+DELETE {{baseUrl}}/categorias/{{postres.response.body.$.id}}
+
+### Los ravioles siguen activos después de anular la categoría — RN-06
+# Esperado: 200 (activo = true)
+GET {{baseUrl}}/productos/{{ravioles.response.body.$.id}}
+
+### Siguen apareciendo en el listado de productos activos de esa categoría — RN-06
+# Esperado: 200
+GET {{baseUrl}}/productos?categoria_id={{postres.response.body.$.id}}
+
+############################################################
+# CLASIFICAR UN PRODUCTO ANULADO — RN-08
+############################################################
+
+### Crear un producto
+# Esperado: 201
+# @name tiramisu
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Tiramisú",
+  "precio_base": 4500,
+  "unidad_venta_id": 5,
+  "stock_cantidad": 6
+}
+
+### Anularlo
+# Esperado: 204
+DELETE {{baseUrl}}/productos/{{tiramisu.response.body.$.id}}
+
+### Intentar clasificar el producto anulado
+# Esperado: 409
+POST {{baseUrl}}/productos/{{tiramisu.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{pastas.response.body.$.id}},
+  "es_principal": false
+}
+
+############################################################
+# LIMPIEZA: anular lo creado para poder volver a correr el archivo
+############################################################
+
+### Anular los ravioles
+# Esperado: 204
+DELETE {{baseUrl}}/productos/{{ravioles.response.body.$.id}}
+
+### Anular Pastas
+# Esperado: 204
+DELETE {{baseUrl}}/categorias/{{pastas.response.body.$.id}}
+
+### Anular la segunda Bebidas
+# Esperado: 204
+DELETE {{baseUrl}}/categorias/{{bebidas2.response.body.$.id}}
