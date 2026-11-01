@@ -6,6 +6,8 @@ Autor: Alex Pedro Dauria
 
 Repositorio: https://github.com/Alex-Dauria/foodstore-parcial2
 
+Video de presentación: https://youtu.be/S4HfI3vg2cU
+
 ## Requisitos
 
 - Node.js 20.19 o superior (o 22.12 o superior) con npm
